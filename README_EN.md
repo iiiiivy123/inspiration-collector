@@ -9,6 +9,8 @@ When inspiration lives across tabs, bookmarks and different social platforms, fi
 **[Download Windows installer](https://github.com/iiiiivy123/inspiration-collector/releases/latest)** · [Setup guide](docs/usage.md) · [中文说明](README.md) · [Use cases](docs/use-cases-en.md)
 
 > **Name transition:** InspiShelf is the new public-facing name. The current **v0.5.13** installer, desktop shortcut and extension still use **Inspiration Collector / 灵感采集**. They are the same project; there is no separately released InspiShelf binary yet.
+>
+> **Updating an existing installation?** First exit the old desktop app from the **Windows system tray → right-click → 退出灵感采集 (Exit)**. Closing Chrome or the extension popup does not stop the local background service. Install the new version only after it has exited, then reload the Chrome extension.
 
 ## What can it save?
 
@@ -46,6 +48,18 @@ Capabilities vary by site, page type, loaded content, access rights and media fo
 **Requires Windows 10/11 x64 and Google Chrome.** The installer includes the required Python and media components. There is currently no Chrome Web Store listing, mobile app or automatic updater. The installer is unsigned; verify its source and never disable security protections to install it.
 
 For detailed setup and troubleshooting, see the [full guide (Chinese)](docs/usage.md).
+
+## Updating an existing installation
+
+**Always stop the old desktop background app before running a new installer.** This applies to every manual update.
+
+1. Finish or stop any running collection task.
+2. Find **灵感采集 / Inspiration Collector** in the Windows notification area (expand the hidden tray icons with **∧** if necessary).
+3. Right-click its icon and choose **退出灵感采集 (Exit)**. Wait for the icon to disappear. If Setup says the app is still running, cancel Setup, exit the app, and start the installer again.
+4. Download the latest Windows installer from [Releases](https://github.com/iiiiivy123/inspiration-collector/releases/latest), and install **to the same folder**. You normally do not need to uninstall the previous version or delete your library.
+5. After installation, confirm the desktop background service is running. Open `chrome://extensions`, find the **灵感采集** extension, click **Reload**, and refresh any already-open target page.
+
+Your selected media library is not automatically moved by an update. The app currently has **no automatic updater**.
 
 ## Where do files go?
 
