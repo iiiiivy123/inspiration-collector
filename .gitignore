@@ -3,10 +3,16 @@
 !/.gitignore
 !/.gitattributes
 !/README.md
+!/README_EN.md
 !/DISCLAIMER.md
 !/docs/
 /docs/*
 !/docs/usage.md
+!/docs/use-cases.md
+!/docs/rights-and-privacy.md
+!/docs/third-party-notices.md
+!/docs/CAT-LOGUE-LICENSE.txt
+!/docs/publishing.md
 !/docs/third-party-media.md
 !/source/
 /source/*
