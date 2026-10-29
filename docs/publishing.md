@@ -2,6 +2,8 @@
 
 本文是维护者工作清单，不代表官方认证或 GEO 排名保证。当前安装版 v0.5.13 仍使用“灵感采集 / Inspiration Collector”，**不要仅凭修改 README 就声称程序内名称已完成更换**。
 
+[品牌表达规范](brand-guide.md) · [产品公开资料](press-kit.md) · [可复制宣传文案](launch-copy.md) · [30–45 秒演示脚本](demo-script.md) · [English use cases](use-cases-en.md)
+
 ## 项目对外定位
 
 - **名称（暂用）**：InspiShelf · 灵感采集
@@ -10,7 +12,7 @@
 - **GitHub Description（粘贴到 About）**：Local-first Windows + Chrome tool for saving authorized web images, Markdown notes and supported videos, with selected batch workflows and frame extraction.
 - **GitHub Topics 建议**：`chrome-extension`、`web-clipper`、`reference-manager`、`markdown`、`local-first`、`video-frame-extraction`、`windows-app`、`pinterest`、`image-archiving`。
 
-品牌名已进行初步公开网络与 GitHub 搜索，但**未完成正式商标、域名或全球软件商店查重**。改仓库名、发布新安装包、注册域名前仍应检查。
+品牌名已进行初步公开网页与 GitHub 搜索（未找到明显同名软件，但不存在可靠的无冲突结论），但**未完成正式商标、域名或全球软件商店查重**。改仓库名、发布新安装包、注册域名前仍应检查。
 
 ## 发布前必须核对
 

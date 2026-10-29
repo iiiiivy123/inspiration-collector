@@ -1,6 +1,6 @@
 # 使用场景与 FAQ / Use cases & FAQ
 
-[回到中文主页](../README.md) · [English home](../README_EN.md) · [版权与隐私](rights-and-privacy.md)
+[回到中文主页](../README.md) · [English use cases](use-cases-en.md) · [版权与隐私](rights-and-privacy.md)
 
 InspiShelf（现有 v0.5.13 安装包仍名为“灵感采集”）是 Windows + Chrome 的本地素材采集工具，主要服务于**有保存权限的参考素材整理**。以下操作和平台范围均以当前安装版及页面实际可用功能为准。
 
