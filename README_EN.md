@@ -1,87 +1,89 @@
-# InspiShelf — Local-first reference and media collector
+# InspiShelf — A local-first reference collector
 
-**Keep the web references you are allowed to save in your own local library.**
+**From scattered saves to a folder you actually own.**
 
-InspiShelf (formerly **Inspiration Collector / 灵感采集**) combines a Chrome extension with a Windows desktop background service. It helps creators save images, Markdown notes, text and supported video files from selected sites, with batch collection and frame extraction where available.
+When inspiration lives across tabs, bookmarks and different social platforms, finding a reference again can become a project of its own.
 
-[中文说明](README.md) · [Download for Windows](https://github.com/iiiiivy123/inspiration-collector/releases/latest) · [Full setup guide (Chinese)](docs/usage.md) · [Use cases and FAQ](docs/use-cases.md) · [Rights & privacy](docs/rights-and-privacy.md)
+**InspiShelf** is a **Windows + Chrome tool for collecting authorized visual references** into local folders. Save images, Markdown notes, text and supported video files from selected websites. Some author pages and boards also support batch collection, and supported videos can be turned into reference frames.
 
-> **Naming transition:** The current **v0.5.13** installer and app still say **Inspiration Collector / 灵感采集**. InspiShelf is the new public-facing product name; there is no separate InspiShelf binary yet. Renaming the installed app requires a separately tested release to preserve existing settings and saved files.
->
-> **Independent project:** Not affiliated with, endorsed by, or sponsored by any platform named below. Names are used only to describe compatibility.
+**[Download Windows installer](https://github.com/iiiiivy123/inspiration-collector/releases/latest)** · [Setup guide](docs/usage.md) · [中文说明](README.md) · [Use cases](docs/use-cases-en.md)
 
-## Who is this for?
+> **Name transition:** InspiShelf is the new public-facing name. The current **v0.5.13** installer, desktop shortcut and extension still use **Inspiration Collector / 灵感采集**. They are the same project; there is no separately released InspiShelf binary yet.
 
-Designers, illustrators, video editors and other creators who need to keep **authorized reference materials** on their own Windows computer rather than scattered across multiple site collections.
+## What can it save?
 
-## Features
+| Your reference | Available workflow | Local output |
+| --- | --- | --- |
+| Visuals from a supported post | Collect images | Image files |
+| A post worth keeping as a note | Save text, source and optional images / already-loaded comments / local OCR | Markdown and selected attachments |
+| Text only | Choose text-only mode | A `.md` file, without media attachments |
+| A supported ordinary video | Save the video and optionally extract frames | Video file and reference images |
+| A set of related posts | Use supported profile / board batches | Organized folders, history and duplicate checks |
 
-- Save images from supported post or content pages to a chosen local folder.
-- Save body text, source metadata and optional already-loaded comments, images and Windows OCR output as **Markdown notes**.
-- Save text-only `.md` files without downloading attached media.
-- Save supported ordinary video files; extract reference frames from supported downloads or local videos.
-- Collect several items from certain supported profiles or boards, subject to site-specific limits.
-- Review capture history, skip verified duplicates, retry failed items and resume some interrupted batches.
+Your files go into **a local library folder you choose**, not an InspiShelf cloud collection. You can review saved items, open their folders, and resume or retry certain unfinished tasks.
 
-**Requirements:** Windows 10 or 11, x64; Google Chrome. No Python setup is needed for the packaged installer. This is **not** a mobile app, cloud storage service or universal website scraper.
+## Supported websites
 
-## Website compatibility
-
-| Site | Scope (may depend on page, login state and format) |
+| Website | Current coverage and limits |
 | --- | --- |
-| Xiaohongshu / RedNote | Supported individual notes, images, Markdown and video workflows; some profile batches |
-| X / Twitter | Individual posts and supported author-post batches, excluding reposts |
-| Instagram | Supported posts, Reels and profile-list workflows |
-| Pinterest | Individual Pins and specific boards; no batch Markdown board mode |
-| Huaban | Individual items and selected image-batch workflows |
-| Bilibili | Supported video pages and creator-upload lists, subject to media format limits |
-| Other websites | Mainly images visible on the current page; no universal batch support |
+| **Xiaohongshu / RedNote** | Supported note images, Markdown, text and video modes; some creator-profile batches |
+| **Pinterest** | Individual Pins and specific boards; **no batch Markdown mode for boards** |
+| **Instagram** | Posts, Reels and some profile-list workflows |
+| **X / Twitter** | Posts and some author-post batches; reposts excluded |
+| **Huaban** | Individual items and selected image-batch modes |
+| **Bilibili** | Supported video pages and creator-upload lists; applicable video download / frame extraction |
+| **Other sites** | Mainly images from the current page; no universal batching |
 
-Every mode is **not** available on every platform. Website changes, content loading and access restrictions can cause failures. This tool does not bypass logins, paywalls, DRM or access controls.
+Capabilities vary by site, page type, loaded content, access rights and media format. The tool does not bypass logins, paywalls, DRM or other access controls.
 
-## Installation
+## Get started in four steps
 
-1. Open [Releases](https://github.com/iiiiivy123/inspiration-collector/releases/latest) and download the **Windows x64 Setup .exe** asset, not the green Code button or Source code ZIP.
-2. For v0.5.13 the file is called `InspirationCollector-0.5.13-Windows-x64-Setup.exe`.
-3. Run the Windows app. It stays in the system tray.
-4. Open `chrome://extensions`, enable Developer mode, then **Load unpacked** using the installed `extension` folder. The tray menu can copy its path.
-5. Pin the extension, choose your local library folder, open a supported content page and select the capture mode.
+1. From [GitHub Releases](https://github.com/iiiiivy123/inspiration-collector/releases/latest), download the **Windows x64 Setup .exe** under **Assets**, not the green Code button or the source ZIP. The current file is `InspirationCollector-0.5.13-Windows-x64-Setup.exe`.
+2. Install and run **Inspiration Collector / 灵感采集**. It stays in the Windows system tray rather than opening a main window.
+3. In Chrome, open `chrome://extensions`, enable **Developer mode**, and choose **Load unpacked**. Select the installed `extension` folder; its path can be copied from the tray menu.
+4. Pin the extension, select a local library folder, then open a supported content page and choose a collection mode.
 
-The installer is currently unsigned, and there is no automatic updater. Verify the source and do not disable Windows security protection to install it.
+**Requires Windows 10/11 x64 and Google Chrome.** The installer includes the required Python and media components. There is currently no Chrome Web Store listing, mobile app or automatic updater. The installer is unsigned; verify its source and never disable security protections to install it.
 
-## Local folder structure
+For detailed setup and troubleshooting, see the [full guide (Chinese)](docs/usage.md).
+
+## Where do files go?
 
 ```text
-Your chosen library/
-├─ 图片 / [platform] / [item]/
-├─ 图文 / [platform] / [item]/
-├─ 视频 / [platform] / [item]/
-└─ 批量 / [platform] / [creator or board]/
+Chosen library/
+├── 图片 / platform / item /
+├── 图文 / platform / item /
+├── 视频 / platform / item /
+└── 批量 / platform / creator or board /
 ```
 
-Changing the default destination does not move previous files. Text-only notes are stored in the notes or batch categories.
+Folder names are examples. Changing your library location does not move files saved previously.
 
-## Questions people ask
+## Common questions
 
-**Can I save Pinterest boards to my computer?**  
-Supported Pin and board workflows can collect accessible items from a specific board, subject to loading and platform limits.
+**Can I save a Xiaohongshu post as Markdown?**  
+Yes, for supported note pages. You can include selected media and already-loaded comments, or save text only.
 
-**Can I export a Xiaohongshu post to Markdown?**  
-Supported notes can be saved as rich Markdown or text only. Optional comments are limited to what is currently loaded and recognized.
+**Can it save Pinterest board images locally?**  
+It can collect identifiable, accessible Pins from a specific supported board. It is not a full export of hidden or inaccessible items.
 
-**Can I extract still frames from a video?**  
-Yes, from supported video workflows and local video files, within configured limits.
+**Can it extract frames from video?**  
+Yes, for supported videos and locally available video files. Sampling and similarity-based filtering may skip some frames.
 
-**Does InspiShelf upload my collection to its own cloud?**  
-The current collector writes files locally and communicates with a local service. Normal website and media requests still go to the respective source websites or CDNs. See [privacy details](docs/rights-and-privacy.md).
+**Does it upload my media to a service operated by InspiShelf?**  
+The current collector writes to local folders and uses a local background service. Ordinary requests to source websites and media CDNs still occur.
 
-**Can I redistribute or commercially reuse saved media?**  
-Only when you have the necessary rights, permission or a valid legal basis. Content being public on a website does not automatically grant such rights.
+**Is content that is publicly viewable free to reuse?**  
+No. Visibility does not establish a license to copy, distribute or commercially exploit someone else's work.
 
-## Licensing, acknowledgements and issues
+See the [English use-case guide](docs/use-cases-en.md) and [rights & privacy statement](docs/rights-and-privacy.md) for more.
 
-The project source is publicly readable, but **the project has not selected an open-source license**. Third-party components have independent licenses, including [CAT·LOGUE MIT-origin parsing modules](docs/third-party-notices.md) and [FFmpeg components](docs/third-party-media.md).
+## Independence, licensing and feedback
 
-For bugs, please open a [GitHub Issue](https://github.com/iiiiivy123/inspiration-collector/issues) with reproducible steps and a redacted screenshot. Do not share credentials, cookies, private data or copyrighted media files.
+InspiShelf is an independent third-party project, **not affiliated with or endorsed by** Xiaohongshu, Pinterest, Instagram, X, Huaban or Bilibili. Site names identify compatibility only. Comply with applicable law, site rules and rights-holder permissions.
 
-Maintained by [iiiiivy123](https://github.com/iiiiivy123), with AI-assisted development contributions from OpenAI Codex.
+The repository is publicly readable but **does not yet have a project-wide open-source license**. Some parser files originate from CAT·LOGUE under MIT; media and runtime components have their own licenses. See the [notices](docs/third-party-notices.md) and [media component details](docs/third-party-media.md).
+
+For bug reports, use [GitHub Issues](https://github.com/iiiiivy123/inspiration-collector/issues) with a version number, steps and redacted screenshots. Do not post cookies, credentials, private data or copyrighted media.
+
+Maintained by [iiiiivy123](https://github.com/iiiiivy123), with AI-assisted development contributions from OpenAI Codex. [Brand guide](docs/brand-guide.md) · [Launch copy](docs/launch-copy.md).
