@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pydantic import BaseModel, Field, field_validator
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs, urlencode
 from typing import Literal
 
 
@@ -20,6 +20,9 @@ class CommentItem(BaseModel):
 
 
 class CollectRequest(BaseModel):
+    max_images: int = Field(default=0, ge=0, le=100000)
+    omitted_images: int = Field(default=0, ge=0)
+    include_images: bool = True
     md_only: bool = False
     directory_schema: Literal['four-categories-v1', 'function-platform-v2'] = 'four-categories-v1'
     capture_scope: Literal['single', 'batch'] | None = None
@@ -46,6 +49,10 @@ class CollectRequest(BaseModel):
     author_name: str | None = None
     board_url: str | None = None
     board_name: str | None = None
+    list_url: str | None = Field(default=None, max_length=2048)
+    list_kind: Literal['favorites','album','works','videos','shorts','playlist','collection','board'] | None = None
+    list_name: str | None = Field(default=None, max_length=200)
+    list_owner: str | None = Field(default=None, max_length=200)
     images: list[ImageItem] = Field(default_factory=list)
 
     @field_validator("canonical_url")
@@ -58,6 +65,15 @@ class CollectRequest(BaseModel):
             raise ValueError("canonical_url must be http(s)")
         return value
 
+    @field_validator('list_url')
+    @classmethod
+    def valid_list_url(cls, value):
+        if value is None: return None
+        parsed = urlparse(value)
+        if parsed.scheme not in ('http','https') or not parsed.hostname or parsed.username or parsed.password:
+            raise ValueError('invalid collection URL')
+        return parsed._replace(fragment='').geturl()
+
     @field_validator("author_url")
     @classmethod
     def valid_author_url(cls, value: str | None) -> str | None:
@@ -65,6 +81,12 @@ class CollectRequest(BaseModel):
             return None
         cls.valid_url(value)
         parsed = urlparse(value)
+        if parsed.hostname in ('youtube.com','www.youtube.com','m.youtube.com') and parsed.path == '/playlist':
+            playlist = parse_qs(parsed.query).get('list', [''])[0]
+            import re
+            if not re.fullmatch(r'[\w-]+', playlist):
+                raise ValueError('invalid YouTube playlist')
+            return parsed._replace(query=urlencode({'list':playlist}), fragment='').geturl()
         return parsed._replace(query="", fragment="", path=parsed.path.rstrip("/")).geturl()
 
     @field_validator('board_url')
@@ -92,8 +114,16 @@ class DirectoryRequest(BaseModel):
 
 
 class VideoDownloadRequest(CollectRequest):
+    resolver_id: str | None = Field(default=None, max_length=100)
+    subtitle_mode: Literal['none','only','with_video'] = 'none'
+    subtitle_cues: list[dict] = Field(default_factory=list, max_length=100000)
+    subtitle_source: str = Field(default='', max_length=200)
+    subtitle_warning: str = Field(default='', max_length=500)
+    output_format: Literal['original','gif','audio'] = 'original'
+    trim_start: float = Field(default=0, ge=0, le=86400, allow_inf_nan=False)
+    trim_end: float = Field(default=0, ge=0, le=86400, allow_inf_nan=False)
     audio_url: str | None = None
-    media_kind: Literal['ordinary','bilibili-dash','bilibili-file'] = 'ordinary'
+    media_kind: Literal['ordinary','bilibili-dash','bilibili-file','youtube-dash','resolved'] = 'ordinary'
     quality: str | None = None
     max_video_mb: int = Field(default=512, ge=1, le=512)
     approved_bytes: int | None = Field(default=None, ge=0)
@@ -116,13 +146,15 @@ class VideoControlRequest(BaseModel):
 
 
 class CaptureDefaults(BaseModel):
+    skip_gifs: bool = False
+    max_images: int = Field(default=0, ge=0, le=100000)
     layout: Literal['organized','organized_flat'] = 'organized'
     collection_mode: Literal['images','text'] = 'images'
     limit: int = Field(default=20, ge=1, le=500)
     video_action: Literal['skip','save','frames'] = 'skip'
     duplicate_policy: Literal['fill','skip','refresh'] = 'fill'
     include_images: bool = True
-    include_comments: bool = True
+    include_comments: bool = False
     ocr_enabled: bool = True
     strategy: Literal['slides','interval'] = 'slides'
     interval: float = Field(default=1, ge=0.5, le=60, allow_inf_nan=False)

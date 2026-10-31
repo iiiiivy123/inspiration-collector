@@ -3,10 +3,15 @@ import argparse
 import json
 import zipfile
 from pathlib import Path
+if __package__:
+    from .distribution_notices import required_notices
+else:
+    from distribution_notices import required_notices
 
 ROOT = Path(__file__).resolve().parents[1]
 
 def build(channel, output):
+    notices = required_notices(ROOT)
     version = json.loads((ROOT/'source/extension/manifest.json').read_text(encoding='utf-8'))['version']
     output.mkdir(parents=True, exist_ok=True)
     target = output / f'inspiration-collector-{version}-{channel}.zip'
@@ -21,6 +26,8 @@ def build(channel, output):
                 archive.writestr(f'{folder}/{file.name}', data)
         archive.write(ROOT/'docs/usage.md', '使用说明.md')
         archive.write(ROOT/'DISCLAIMER.md', 'DISCLAIMER.md')
+        for source, name in notices:
+            archive.write(source, name)
         archive.writestr('PACKAGE-NOTE.txt', 'Source runtime package: requires Python and dependencies. Windows users should download Windows-x64-Setup.exe from Releases instead.\n')
     return target
 

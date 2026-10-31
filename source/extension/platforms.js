@@ -17,7 +17,7 @@
       body: '#detail-desc .note-text,#detail-desc,.note-content .desc', author: '.author-container .username,.author-wrapper .name', comments: '.comment-item', commentBody: '.content,.note-text', time: '.publish-date,time'},
     x: {post: /\/status\/\d+/, root: 'article[data-testid="tweet"]', gallery: '[data-testid="tweetPhoto"]',
       body: '[data-testid="tweetText"]', author: '[data-testid="User-Name"]', comments: '', time: 'time'},
-    instagram: {post: /^\/(p|reel|reels)\/[\w-]+/, root: '[role="dialog"] article,main article,article', gallery: '',
+    instagram: {post: /^\/(?:[\w.]+\/)?(p|reel|reels)\/[\w-]+/, root: '[role="dialog"] article,main article,article', gallery: '',
       body: 'h1', author: 'header a', comments: 'ul ul li', commentBody: 'span[dir="auto"]', time: 'time'},
     pinterest: {post: /^\/pin\/\d+/, root: '[data-test-id="pin-closeup-container"],[data-test-id="pin-closeup"]', gallery: '[data-test-id="pin-closeup-image"], [data-test-id="pin-image"]',
       body: '[data-test-id="pin-description"],h1', author: '[data-test-id="creator-profile-name"]', comments: '[data-test-id="comment-item"]', commentBody: '[data-test-id="comment-text"]', time: 'time'},
@@ -30,12 +30,12 @@
   };
   function imageUrl(img, kind) {
     // Choose the largest advertised candidate; retain signed query strings.
-    const candidates = (img.srcset || '').split(',').map(part => {
+    const candidates = (img.getAttribute?.('data-srcset') || img.srcset || '').split(',').map(part => {
       const [url, size] = part.trim().split(/\s+/); return {url, size: parseFloat(size) || 0};
-    }).filter(item => /^https?:/.test(item.url)).sort((a, b) => b.size - a.size);
-    let value = candidates[0]?.url || img.currentSrc || img.src || '';
+    }).filter(item => item.url && !/^(data|javascript|blob):/i.test(item.url)).sort((a, b) => b.size - a.size);
+    let value = candidates[0]?.url || img.getAttribute?.('data-src') || img.getAttribute?.('data-original') || img.currentSrc || img.src || '';
     try {
-      const url = new URL(value);
+      const url = new URL(value, globalThis.location?.href);
       if (!['http:', 'https:'].includes(url.protocol)) return '';
       if (kind === 'x' && url.hostname === 'pbs.twimg.com' && url.pathname.startsWith('/media/')) url.searchParams.set('name', 'orig');
       return url.href;
@@ -84,7 +84,7 @@
     // Nested wrappers are one post; unrelated multiple roots are not.
     roots = roots.filter(node => !roots.some(other => other !== node && other.contains(node)));
     let root = roots.length === 1 ? roots[0] : null;
-    if (!root && kind === 'generic') root = document.body;
+    if(kind==='generic')root=document.querySelector('#mw-content-text .mw-parser-output,#mw-content-text,.mw-parser-output')||root||document.body;
     const warnings = [];
     if (!root) warnings.push('未定位到单帖正文区域，仅读取本页明确的分享元数据；不会抓取推荐流。');
     const text = node => (node?.innerText || node?.textContent || '').trim().slice(0, 100000);
@@ -92,7 +92,7 @@
     const meta = key => document.querySelector(`meta[property="${key}"]`)?.content || '';
     const images = [], seen = new Set();
     const add = (url, alt = '') => {
-      if (!/^https?:\/\//.test(url) || seen.has(url) || images.length >= 100) return;
+      if (!/^https?:\/\//.test(url) || seen.has(url)) return;
       seen.add(url); images.push({url, alt});
     };
     if (kind === 'pinterest') {
@@ -104,10 +104,16 @@
       const galleries = cfg.gallery ? [...root.querySelectorAll(cfg.gallery)] : [root];
       const nodes = [...new Set(galleries.flatMap(node => node.tagName === 'IMG' ? [node] : [...node.querySelectorAll('img')]))];
       for (const img of nodes) {
-        if (img.closest('.comment-item,header,[data-testid="User-Name"],[data-testid="quoteTweet"],ul ul li')) continue;
+        if (img.closest('.comment-item,header,[data-testid="User-Name"],[data-testid="quoteTweet"]') || kind==='instagram'&&img.closest('ul ul li')) continue;
+        if(kind==='generic'&&img.closest('nav,footer,aside,[role="banner"],[data-ad],[data-ad-slot],.advertisement,.ad-container,.ad-slot,.adsbygoogle,[id^="google_ads"],[id^="ad-"],[class*="ad-slot"],.mw-editsection,.navbox'))continue;
         const url = imageUrl(img, kind);
+        if(kind==='generic'&&/(^|\.)wiki\.gg$/.test(location.hostname)&&/\/Spoiler\.png(?:\/|[?#]|$)/i.test(url)){
+          const warning='已跳过剧透占位图；请在网页显示实际图片后再保存。';if(!warnings.includes(warning))warnings.push(warning);continue;
+        }
         if (/avatar|profile_images|emoji|sticker|qrcode/i.test(url)) continue;
-        if (Math.max(img.naturalWidth || 0, img.width || 0) < 180) continue;
+        const wikiAsset=kind==='generic'&&/(^|\.)(wiki\.gg|stardewvalleywiki\.com)$/.test(location.hostname)&&Boolean(img.closest('a[href*="File:"],a.image,a.mw-file-description'))&&/\/images\//.test(new URL(url,location.href).pathname);
+        if (!wikiAsset && Math.max(img.naturalWidth || 0, img.width || 0) < (kind==='generic'?48:180)) continue;
+        if(kind==='generic'&&(!visible(img)||/doubleclick\.net|googlesyndication\.com|googleadservices\.com/i.test(url)))continue;
         if (kind === 'instagram' && !/\.(cdninstagram\.com|fbcdn\.net)$/.test(new URL(url || location.href).hostname)) continue;
         add(url, img.alt || '');
       }
@@ -121,8 +127,9 @@
       if (images.length) warnings.push('仅取得帖子分享图，不能据此确认轮播全部图片已保存。');
     }
     const canonical = new URL(location.href); canonical.hash = '';
-    if (kind !== 'xhs') canonical.search = '';
-    const payload = {canonical_url: canonical.href, page_title: text(first('h1,#detail-title')) || document.title,
+    if (!['xhs','generic'].includes(kind)) canonical.search = '';
+    const genericTitle=()=>{const heading=text(document.querySelector('#firstHeading,h1'))||document.title;const site=meta('og:site_name')||location.hostname;return heading.toLowerCase().includes(site.toLowerCase())?heading:site+' · '+heading;};
+    const payload = {has_live_photo:kind==='xhs'&&Boolean(root?.querySelector('video.live-video')),canonical_url: canonical.href, page_title: kind==='generic'?genericTitle():text(first('h1,#detail-title'))||document.title,
       images, has_video: Boolean(root?.querySelector('video')), collection_mode: options.collection_mode || 'images', platform: kind, extraction_warnings: warnings};
     if(kind==='instagram' && root) {
       const owner=first('header a[href],h2 a[href]');
@@ -152,7 +159,8 @@
       }
       payload.comments_status = !payload.comments_requested ? '未开启' : payload.comments.length ? `已读取 ${payload.comments.length} 条（仅已加载）` : !cfg.comments ? '当前平台未支持评论' : '未读取到评论（可能未加载、没有评论或页面结构不匹配）';
       if (payload.comments_requested) warnings.push(cfg.comments ? '评论只包含当前已加载且能识别的部分，不代表全部评论。' : '当前站点尚未适配评论提取，没有把其他帖子当成评论。');
-      if (!options.include_images) payload.images = [];
+      payload.include_images = options.include_images !== false;
+      if (!payload.include_images && !payload.ocr_enabled) payload.images = [];
       if (!payload.body_text && !payload.images.length) throw new Error('未识别到正文或正文图片，未保存空文档；请打开帖子详情并展开正文后再试。');
     }
     return payload;

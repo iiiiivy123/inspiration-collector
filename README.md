@@ -8,11 +8,15 @@
 
 **[下载 Windows 安装包](https://github.com/iiiiivy123/inspiration-collector/releases/latest)** · [第一次使用教程](docs/usage.md) · [English](README_EN.md) · [真实使用场景](docs/use-cases.md)
 
-> **名称说明**：InspiShelf 是新的对外展示名称。当前已发布的 **v0.5.13** 安装包、快捷方式和 Chrome 扩展仍叫「灵感采集 / Inspiration Collector」，是同一款软件。还没有单独名为 InspiShelf 的新版安装包。
+> **名称说明**：InspiShelf 是对外展示名称，**v0.5.15** 安装包、快捷方式和 Chrome 扩展仍叫「灵感采集 / Inspiration Collector」。安装位置和原有素材库保持兼容。
 >
-> **已有旧版？更新前先退出后台！** 在 Windows 右下角托盘中找到「灵感采集」→ 右键 → **退出灵感采集**，确认退出后再打开新安装包。更新完成后还要到 Chrome 扩展管理页点击**重新加载**。仅关闭 Chrome、扩展弹窗或说明书**不会退出本地后台**。详细步骤见下文。
+> **从 0.5.13 或更早版本更新？** 先从 Windows 托盘退出旧后台，再安装。支持安全退出的新版会在空闲时响应安装器请求；忙碌时请先结束任务。安装后仍需重新加载 Chrome 扩展并刷新作品页面。
 
 ## 从收藏夹，到本地素材库
+
+![使用自有示例网页保存纯文字笔记](docs/assets/local-capture.gif)
+
+12 秒分步演示：实际 Chrome 扩展读取自有本地示例，保存为 MD，再显示保存位置。为保护路径，截图遮住了测试目录；不是平台兼容性证明。
 
 | 看到的内容 | 可以怎样保存 | 得到什么 |
 | --- | --- | --- |
@@ -40,18 +44,18 @@
 
 ## 4 步开始
 
-1. 在 [Releases](https://github.com/iiiiivy123/inspiration-collector/releases/latest) 的 **Assets** 里下载 Windows 64 位安装包（当前文件名 `InspirationCollector-0.5.13-Windows-x64-Setup.exe`）。不要下载绿色 **Code** 按钮中的源码 ZIP。
+1. 在 [Releases](https://github.com/iiiiivy123/inspiration-collector/releases/latest) 的 **Assets** 下载 `InspirationCollector-0.5.15-Windows-x64-Setup.exe`。`NoInstall.zip` 是完整免安装版；Source code 和小体积 `user.zip` 是需要开发环境的源码包。
 2. 安装并启动桌面「灵感采集」。它会在 **Windows 系统托盘**运行，而不是打开一个主窗口。
-3. 打开 Chrome 的 `chrome://extensions` → 开启「开发者模式」→「加载已解压的扩展程序」。从托盘菜单复制 `extension` 文件夹的实际地址，选择该文件夹。
+3. 从托盘菜单复制扩展文件夹地址。打开 Chrome 的 `chrome://extensions` → 开启「开发者模式」→「加载未打包的扩展程序」，粘贴地址并选择 `extension` 文件夹。
 4. 固定 Chrome 工具栏里的扩展，设置素材库位置，打开要保存的作品页并选择功能。
 
 这一步的安装操作只需要首次完成。安装包内置所需的 Python 与媒体组件，不用自己配置开发环境。
 
 **目前只支持 Windows 10/11 64 位 + Chrome**；暂未上架 Chrome 扩展商店，没有手机端，也没有自动更新。当前安装包未签名，遇到 Windows 的「未知发布者」提示，请核实下载来源，**不要关闭安全防护**。详细教程：[安装、更新与常见问题](docs/usage.md)。
 
-## 已经安装过？每次更新都要先退出旧程序
+## 已经安装过？原位更新即可
 
-**先退出旧版后台，再运行新安装包。** 这是每次手动更新都要做的操作，不能只关闭 Chrome。
+**0.5.13 及更早版本先退出托盘后台，再安装新版。** 从支持安全退出的版本更新时，安装器会请求空闲后台退出；有任务时阻止覆盖，完成或停止任务后再试。不会先卸载旧版，也不会搬走素材。
 
 1. 等待当前采集结束，或者在扩展里停止正在进行的任务。
 2. 在 Windows 右下角通知区域找到「灵感采集」图标；没看到就先点小箭头 **∧** 展开隐藏图标。

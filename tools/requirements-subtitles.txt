@@ -1,0 +1,4 @@
+# Optional isolated local speech worker; do not install into the capture server.
+faster-whisper==1.2.1
+# av 19 removed the metadata_errors argument used by faster-whisper 1.2.1.
+av==16.0.1

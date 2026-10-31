@@ -17,11 +17,12 @@ from urllib.response import addinfourl
 from .catalog import fingerprint
 
 from .storage import safe
-from .destinations import resolve_destination, text_assets
+from .destinations import resolve_destination, text_assets, note_media_layout
 from .catalog import Catalog
+from .retention import prune_finished, STATUS_LIMIT, STATUS_TTL
 
 MAX_BYTES = 512 * 1024 * 1024
-HOSTS = ('xhscdn.com', 'xhscdn.net', 'xiaohongshu.com', 'pinimg.com', 'hbimg.com', 'huaban.com', 'video.twimg.com', 'cdninstagram.com', 'fbcdn.net', 'weibocdn.com', 'sinaimg.cn', 'bilivideo.com', 'bilivideo.cn')
+HOSTS = ('xhscdn.com', 'xhscdn.net', 'xiaohongshu.com', 'pinimg.com', 'hbimg.com', 'huaban.com', 'video.twimg.com', 'cdninstagram.com', 'fbcdn.net', 'weibocdn.com', 'sinaimg.cn', 'bilivideo.com', 'bilivideo.cn', 'googlevideo.com')
 
 
 def validate_url(value):
@@ -68,6 +69,10 @@ class VideoDownloads:
 
     def start(self, root: Path, value):
         with self.lock:
+            prune_finished(self.jobs)
+            for key, asset in list(self.assets.items()):
+                if time.monotonic() - asset.get('created_at', time.monotonic()) > STATUS_TTL:
+                    self.assets.pop(key, None)
             if any(job['status'] in ('running', 'paused') for job in self.jobs.values()):
                 raise ValueError('已有视频下载任务，请先停止或等待完成')
             job_id = secrets.token_urlsafe(24)
@@ -77,9 +82,10 @@ class VideoDownloads:
 
     def status(self, job_id):
         with self.lock:
+            prune_finished(self.jobs)
             job = self.jobs[job_id]
             job['lease'] = time.monotonic()
-            return {k: v for k, v in job.items() if k not in ('lease', 'control')}
+            return {k: v for k, v in job.items() if k not in ('lease', 'control', 'finished_at')}
 
     def control(self, job_id, action):
         if action not in ('running', 'paused', 'stopped'):
@@ -88,10 +94,12 @@ class VideoDownloads:
             job = self.jobs[job_id]
             if job['status'] not in ('running', 'paused'):
                 return
+            previous = job['control']
             job['control'] = action
             job['lease'] = time.monotonic()
             job['status'] = 'paused' if action == 'paused' else 'running'
-            job['message'] = {'paused': '下载已暂停', 'running': '继续下载', 'stopped': '正在停止下载…'}[action]
+            if previous != action:
+                job['message'] = {'paused': '下载已暂停', 'running': '正在恢复下载…', 'stopped': '正在停止下载…'}[action]
 
     def _point(self, job_id):
         while True:
@@ -106,14 +114,26 @@ class VideoDownloads:
 
     def _update(self, job_id, **values):
         with self.lock:
+            if values.get('status') in ('completed', 'failed', 'stopped'):
+                values['finished_at'] = time.monotonic()
             self.jobs[job_id].update(values)
 
     def _run(self, job_id, root, value):
         temporary = None
         workspace = None
+        converted = None
+        subtitle_error = None
         try:
+            resolved = value.media_kind == 'resolved'
+            if resolved and (not value.resolver_id or value.audio_url):
+                raise ValueError('成熟下载器缺少有效预检记录')
             is_bili=any((urlsplit(value.url).hostname or '')==h or (urlsplit(value.url).hostname or '').endswith('.'+h) for h in ('bilivideo.com','bilivideo.cn'))
-            if (value.audio_url or is_bili or value.media_kind.startswith('bilibili')):
+            youtube = value.media_kind == 'youtube-dash'
+            if youtube:
+                from .media_resolver import canonical
+                if canonical(value.canonical_url)[1] != 'youtube' or not value.audio_url:
+                    raise ValueError('YouTube分轨必须绑定具体视频和完整音轨')
+            if (value.audio_url and not youtube or is_bili or value.media_kind.startswith('bilibili')):
                 source=urlsplit(value.canonical_url)
                 import re
                 if source.hostname not in ('www.bilibili.com','bilibili.com') or not re.fullmatch(r'/video/BV[\da-zA-Z]{10}/?',source.path):
@@ -121,19 +141,38 @@ class VideoDownloads:
                 if value.media_kind not in ('bilibili-dash','bilibili-file') or (value.media_kind=='bilibili-dash')!=bool(value.audio_url):
                     raise ValueError('B站视频轨道信息不完整')
                 bilibili_media.executables()
-            cached = self.catalog.cached(value.url) if self.catalog and value.duplicate_policy != 'refresh' and not is_bili else None
-            url = value.url if cached else validate_url(value.url)
+            derived = value.output_format != 'original' or value.trim_start or value.trim_end
+            asset_key = value.url + (f'#collector-{value.output_format}-{value.trim_start}-{value.trim_end}' if derived else '')
+            from .video_cache import key as output_key
+            reuse_key = output_key(value)
+            cached = self.catalog.cached(reuse_key) if self.catalog and value.duplicate_policy != 'refresh' else None
+            processed = bool(cached)
+            if not cached and self.catalog and value.duplicate_policy != 'refresh' and not is_bili and not resolved:
+                cached = self.catalog.cached(value.url)
+            cached_gif = bool(cached and value.output_format == 'gif' and cached.suffix.lower() == '.gif')
+            url = value.url if cached or resolved else validate_url(value.url)
             directory, _, page_id = resolve_destination(root, value)
             reading_directory = directory
-            if value.collection_mode == 'text': directory = text_assets(directory, value, page_id) / '视频'
+            if value.collection_mode == 'text' and not note_media_layout(value): directory = text_assets(directory, value, page_id) / '视频'
             directory.mkdir(parents=True, exist_ok=True)
-            if value.audio_url:
+            if resolved and not processed:
+                from .segmented_media import download
+                workspace = tempfile.TemporaryDirectory(prefix='.media-', dir=directory)
+                limit = min(MAX_BYTES, value.max_video_mb * 1048576)
+                if value.approved_bytes is not None:
+                    limit = min(limit, value.approved_bytes)
+                cached = download(value.resolver_id, value.canonical_url, value.url, workspace.name,
+                                  limit, value.min_free_mb * 1048576, lambda: self._point(job_id),
+                                  lambda count: self._update(job_id, bytes=count, message=f'下载媒体分段 {count/1048576:.1f} MB'),
+                                  lambda: self.jobs[job_id]['control'])
+            if value.audio_url and not processed:
                 workspace=tempfile.TemporaryDirectory(prefix='.bili-',dir=directory)
                 tracks=[];downloaded=0;limit=min(MAX_BYTES,value.max_video_mb*1048576)
                 for index,track_url in enumerate((value.url,value.audio_url)):
                     host=urlsplit(track_url).hostname or ''
-                    if not any(host==h or host.endswith('.'+h) for h in ('bilivideo.com','bilivideo.cn')):
-                        raise ValueError('分轨来源不属于B站视频CDN')
+                    domains=('googlevideo.com',) if youtube else ('bilivideo.com','bilivideo.cn')
+                    if not any(host==h or host.endswith('.'+h) for h in domains):
+                        raise ValueError('分轨来源与作品平台不一致')
                     validate_url(track_url)
                     target=Path(workspace.name)/f'track-{index}.mp4'
                     with build_opener(SafeRedirect()).open(Request(track_url,headers=bilibili_media.source_headers(track_url)),timeout=12) as response, target.open('xb') as output:
@@ -149,7 +188,7 @@ class VideoDownloads:
                             if downloaded>limit or (value.approved_bytes is not None and downloaded>value.approved_bytes):raise ValueError('音视频总大小超过确认上限')
                             if shutil.disk_usage(directory).free<limit*2+value.min_free_mb*1048576:raise ValueError('空间不足以下载并合并音视频轨道')
                             output.write(chunk)
-                            self._update(job_id,bytes=downloaded,message=f'下载B站音视频轨道 {downloaded/1048576:.1f} MB')
+                            self._update(job_id,bytes=downloaded,message=f'下载音视频轨道 {downloaded/1048576:.1f} MB')
                         if not received or expected and received!=expected:raise ValueError('音视频轨道下载不完整')
                     tracks.append(target)
                 cached=Path(workspace.name)/'merged.mp4'
@@ -167,7 +206,7 @@ class VideoDownloads:
                 limit = min(MAX_BYTES, value.max_video_mb * 1048576)
                 if expected > limit:
                     raise ValueError('视频超过单个文件大小限制，本次未下载')
-                if not value.audio_url and value.approved_bytes is not None and expected > value.approved_bytes:
+                if not resolved and not cached_gif and not value.audio_url and value.approved_bytes is not None and expected > value.approved_bytes:
                     raise ValueError('视频大小比预检增加，请重新预检确认')
                 if shutil.disk_usage(directory).free < expected + value.min_free_mb * 1048576:
                     raise ValueError('磁盘空间不足，视频未开始保存')
@@ -181,9 +220,12 @@ class VideoDownloads:
                         if not chunk:
                             break
                         if received == 0:
-                            suffix, mime = video_type(chunk)
+                            if value.output_format == 'gif' and chunk.startswith((b'GIF87a', b'GIF89a')):
+                                suffix, mime = '.gif', 'image/gif'
+                            else:
+                                suffix, mime = video_type(chunk)
                         received += len(chunk)
-                        if not value.audio_url and value.approved_bytes is not None and received > value.approved_bytes:
+                        if not resolved and not cached_gif and not value.audio_url and value.approved_bytes is not None and received > value.approved_bytes:
                             raise ValueError('视频大小比预检增加，请重新预检确认')
                         if received > limit:
                             raise ValueError('视频超过大小限制，停止下载')
@@ -197,11 +239,39 @@ class VideoDownloads:
                 self._point(job_id)
                 if not received or (expected and received != expected):
                     raise ValueError('视频下载不完整，未标记为成功')
-            filename = 'video_' + digest.hexdigest()[:16] + suffix
-            if is_bili:
+            if value.output_format == 'gif' and suffix != '.gif':
+                from .gif_media import convert
+                converted = directory / f'.gif-{job_id}.gif'
+                self._update(job_id, message='正在转换为 GIF 动图…')
+                convert(temporary, converted, lambda: self._point(job_id), value.min_free_mb)
+                temporary.unlink()
+                temporary = converted
+                digest = hashlib.sha256(temporary.read_bytes())
+                received = temporary.stat().st_size
+                suffix, mime = '.gif', 'image/gif'
+            if is_bili and not (processed and value.output_format == 'audio'):
                 tracks=bilibili_media.inspect(temporary).get('streams',[])
                 if not any(t.get('codec_type')=='video' for t in tracks) or not any(t.get('codec_type')=='audio' for t in tracks):
                     raise ValueError('B站结果缺音频或视频，未当作完整视频保存')
+            if processed and mime != 'image/gif':
+                from .media_output import trimmed_cues
+                duration = float(bilibili_media.inspect(temporary)['format']['duration'])
+                value.subtitle_cues = trimmed_cues(value.subtitle_cues, value.trim_start, value.trim_start + duration)
+                suffix, mime = ('.m4a', 'audio/mp4') if value.output_format == 'audio' else ('.mp4', 'video/mp4')
+            if not processed and mime != 'image/gif':
+                from .media_output import transform, trimmed_cues
+                converted = directory / (f'.output-{job_id}' + ('.m4a' if value.output_format == 'audio' else '.mp4'))
+                self._update(job_id, message='正在提取音频…' if value.output_format == 'audio' else '正在检查并统一为 MP4（H.264/AAC）…')
+                duration = transform(temporary, converted, value, lambda: self._point(job_id))
+                value.subtitle_cues = trimmed_cues(value.subtitle_cues, value.trim_start, duration-value.trim_end)
+                temporary.unlink()
+                temporary = converted
+                suffix, mime = ('.m4a', 'audio/mp4') if value.output_format == 'audio' else ('.mp4', 'video/mp4')
+                digest = hashlib.sha256(temporary.read_bytes())
+                received = temporary.stat().st_size
+                if received > limit:
+                    raise ValueError('处理结果超过文件大小限制')
+            filename = (safe(value.page_title or '视频')[:100] + '_' + digest.hexdigest()[:8] if suffix != '.gif' else 'animation_' + digest.hexdigest()[:16]) + suffix
             destination = directory / filename
             if destination.resolve().parent != directory.resolve():
                 raise ValueError('视频目标路径无效')
@@ -213,20 +283,46 @@ class VideoDownloads:
                 temporary.unlink()
             else:
                 temporary.replace(destination)
+            subtitle_file = None
+            if value.subtitle_mode != 'none' and mime.startswith('video/'):
+                from .subtitles import save as save_subtitles
+                self._update(job_id, message='视频已保存，正在提取字幕和 Markdown…')
+                try:
+                    subtitle_file, subtitle_origin = save_subtitles(destination, directory, value.subtitle_cues, lambda: self._point(job_id), value)
+                except InterruptedError:
+                    raise
+                except Exception as exc:
+                    subtitle_error = f'视频已保留，字幕/MD未完成：{exc}'
+                if value.subtitle_mode == 'only' and subtitle_file:
+                    # Delete only the new output, never a pre-existing duplicate.
+                    if not duplicate:
+                        destination.unlink()
+                    md = subtitle_file.with_suffix('.md')
+                    if self.catalog:
+                        self.catalog.record(value.canonical_url,value.page_title,value.author_name,'text',reading_directory,[str(p.relative_to(reading_directory)) for p in (md,)],{'text':True,'category':'text'})
+                    self._update(job_id,status='completed',percent=100,message='文字稿 MD 已保存',result={'path':str(md),'directory':str(reading_directory),'relative_file':str(md.relative_to(reading_directory)),'mime':'text/markdown','subtitle_source':subtitle_origin,'duplicate':False})
+                    return
             record = {'source_url': value.canonical_url, 'page_title': value.page_title,
                       'file': filename, 'sha256': digest.hexdigest(), 'bytes': received}
-            sidecar = destination.with_suffix('.json')
+            if subtitle_file:
+                record.update(subtitle_file=subtitle_file.name, subtitle_source=subtitle_origin)
+            sidecar = destination.parent / '_来源记录' / destination.with_suffix('.json').name
+            sidecar.parent.mkdir(parents=True, exist_ok=True)
             temp_meta = sidecar.with_suffix('.json.tmp')
             temp_meta.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding='utf-8')
             temp_meta.replace(sidecar)
             if self.catalog:
-                self.catalog.register_asset(value.url, destination, digest.hexdigest())
+                self.catalog.register_asset(asset_key, destination, digest.hexdigest())
+                self.catalog.register_asset(reuse_key, destination, digest.hexdigest())
                 self.catalog.record(value.canonical_url, value.page_title, value.author_name or value.board_name,
-                                    value.collection_mode, reading_directory, [str(destination.relative_to(reading_directory))], {'videos': True, 'category': 'batch' if value.capture_scope == 'batch' or value.capture_scope is None and (value.author_url or value.board_url) else 'video'})
+                                    value.collection_mode, reading_directory, [str(destination.relative_to(reading_directory))]+([str(p.relative_to(reading_directory)) for p in (subtitle_file,subtitle_file.with_suffix('.md'))] if subtitle_file else []), {'videos': mime.startswith('video/'), 'images': mime == 'image/gif', 'category': 'batch' if value.capture_scope == 'batch' or value.capture_scope is None and (value.author_url or value.board_url) else 'images' if mime == 'image/gif' else 'video'})
             asset_id = secrets.token_urlsafe(32)
             with self.lock:
-                self.assets[asset_id] = dict(path=destination, mime=mime, page={k: getattr(value, k) for k in ('canonical_url','page_title','author_url','author_name','board_url','board_name','layout','destination','collection_mode','ocr_enabled','directory_schema','capture_scope','capture_kind')})
-            self._update(job_id, status='completed', percent=100, message='视频已保存', result={'asset_id': asset_id, 'path': str(destination), 'directory':str(reading_directory), 'relative_file':str(destination.relative_to(reading_directory)), 'duplicate': duplicate, 'page': self.assets[asset_id]['page']})
+                self.assets[asset_id] = dict(path=destination, mime=mime, page={k: getattr(value, k) for k in ('canonical_url','page_title','author_url','author_name','board_url','board_name','list_url','list_kind','list_name','list_owner','layout','destination','collection_mode','ocr_enabled','directory_schema','capture_scope','capture_kind')})
+                self.assets[asset_id]['created_at'] = time.monotonic()
+                while len(self.assets) > STATUS_LIMIT:
+                    self.assets.pop(next(iter(self.assets)))
+            self._update(job_id, status='completed', percent=100, message=subtitle_error or ('GIF 动图已保存' if mime == 'image/gif' else '音频已保存' if mime.startswith('audio/') else '视频、字幕和MD已保存' if subtitle_file else '视频已保存'), result={'asset_id': asset_id, 'mime': mime, 'path': str(destination), 'directory':str(reading_directory), 'relative_file':str(destination.relative_to(reading_directory)), 'duplicate': duplicate, 'page': self.assets[asset_id]['page'], 'partial':bool(subtitle_error), 'warning':subtitle_error, 'subtitle_file':str(subtitle_file) if subtitle_file else None, 'subtitle_source':subtitle_origin if subtitle_file else None})
         except InterruptedError as exc:
             self._update(job_id, status='stopped', message=str(exc))
         except HTTPError as exc:
@@ -234,6 +330,8 @@ class VideoDownloads:
         except Exception as exc:
             self._update(job_id, status='failed', message=f'下载失败：{exc}')
         finally:
+            if converted is not None and converted.exists():
+                converted.unlink(missing_ok=True)
             if temporary is not None and temporary.exists():
                 temporary.unlink(missing_ok=True)
             if workspace is not None:

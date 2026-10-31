@@ -6,11 +6,11 @@ When inspiration lives across tabs, bookmarks and different social platforms, fi
 
 **InspiShelf** is a **Windows + Chrome tool for collecting authorized visual references** into local folders. Save images, Markdown notes, text and supported video files from selected websites. Some author pages and boards also support batch collection, and supported videos can be turned into reference frames.
 
-**[Download Windows installer](https://github.com/iiiiivy123/inspiration-collector/releases/latest)** · [Setup guide](docs/usage.md) · [中文说明](README.md) · [Use cases](docs/use-cases-en.md)
+**[Download Windows installer](https://github.com/iiiiivy123/inspiration-collector/releases/latest)** · [Setup guide](docs/usage-en.md) · [中文说明](README.md) · [Use cases](docs/use-cases-en.md)
 
-> **Name transition:** InspiShelf is the new public-facing name. The current **v0.5.13** installer, desktop shortcut and extension still use **Inspiration Collector / 灵感采集**. They are the same project; there is no separately released InspiShelf binary yet.
+> **Name transition:** InspiShelf is the public-facing name. The **v0.5.15** installer, desktop shortcut and extension still use **Inspiration Collector / 灵感采集**, preserving the existing installation and data paths.
 >
-> **Updating an existing installation?** First exit the old desktop app from the **Windows system tray → right-click → 退出灵感采集 (Exit)**. Closing Chrome or the extension popup does not stop the local background service. Install the new version only after it has exited, then reload the Chrome extension.
+> **Updating from 0.5.13 or earlier?** First exit the old app from the Windows tray. Compatible newer versions exit safely when requested by the installer; busy tasks block installation. After updating, reload the extension and refresh the content page.
 
 ## What can it save?
 
@@ -40,18 +40,18 @@ Capabilities vary by site, page type, loaded content, access rights and media fo
 
 ## Get started in four steps
 
-1. From [GitHub Releases](https://github.com/iiiiivy123/inspiration-collector/releases/latest), download the **Windows x64 Setup .exe** under **Assets**, not the green Code button or the source ZIP. The current file is `InspirationCollector-0.5.13-Windows-x64-Setup.exe`.
+1. From [GitHub Releases](https://github.com/iiiiivy123/inspiration-collector/releases/latest), download `InspirationCollector-0.5.15-Windows-x64-Setup.exe`. `NoInstall.zip` includes a complete runtime; **Source code** and the smaller `user.zip` require a developer environment.
 2. Install and run **Inspiration Collector / 灵感采集**. It stays in the Windows system tray rather than opening a main window.
 3. In Chrome, open `chrome://extensions`, enable **Developer mode**, and choose **Load unpacked**. Select the installed `extension` folder; its path can be copied from the tray menu.
 4. Pin the extension, select a local library folder, then open a supported content page and choose a collection mode.
 
 **Requires Windows 10/11 x64 and Google Chrome.** The installer includes the required Python and media components. There is currently no Chrome Web Store listing, mobile app or automatic updater. The installer is unsigned; verify its source and never disable security protections to install it.
 
-For detailed setup and troubleshooting, see the [full guide (Chinese)](docs/usage.md).
+For detailed setup and troubleshooting, see the [English setup guide](docs/usage-en.md).
 
 ## Updating an existing installation
 
-**Always stop the old desktop background app before running a new installer.** This applies to every manual update.
+**For 0.5.13 and earlier, exit the tray app first.** Newer compatible versions support idle-only shutdown requested by the installer. Busy tasks block overwriting until they finish or are stopped. No preliminary uninstall is needed.
 
 1. Finish or stop any running collection task.
 2. Find **灵感采集 / Inspiration Collector** in the Windows notification area (expand the hidden tray icons with **∧** if necessary).

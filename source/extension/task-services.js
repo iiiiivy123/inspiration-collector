@@ -1,14 +1,22 @@
 // Service-backed history; preparation never downloads media bodies.
+let batchDownloadItem=null;
 let preparedPosts=[],preparing=false,committing=false,approvedSizes=new Map();
 async function service(path,body){return downloadApi(8766,healthCache.settings_token,path,body);}
-async function probeSource(source){
+async function probeSource(source,group={}){
+  if(source.canonical_url){
+    const local=await service('/video/reuse',{...source,...group,capture_scope:group.list_url?'batch':batchOptions.capture_scope,save_directory:typeof batchDirectory==='string'?batchDirectory:'',duplicate_policy:batchOptions.duplicate_policy||'fill',output_format:batchOptions.output_format==='audio'?'audio':source.kind==='gif'?'gif':'original',trim_start:batchOptions.trim_start||0,trim_end:batchOptions.trim_end||0});
+    if(local.local)return local;
+  }
+  if(source.resolver_id)return service('/media/probe',{resolver_id:source.resolver_id});
   if(source.media_kind?.startsWith('bilibili')&&!healthCache.bilibili_mux)throw new Error('本地服务缺少B站音视频合并组件，请更新完整安装包；不会保存无声视频');
   const urls=[source.url,...(source.audio_url?[source.audio_url]:[])];
   const result=await service('/video/probe',{urls,destination:batchOptions.destination,duplicate_policy:source.audio_url?'refresh':batchOptions.duplicate_policy});
   return {bytes:result.items.length===urls.length&&result.items.every(i=>Number.isFinite(i.bytes))?result.items.reduce((n,i)=>n+i.bytes,0):null,local:result.items.every(i=>i.local)};
 }
-function startPreparation(){preparedPosts=[];approvedSizes=new Map();committing=false;preparing=Boolean(healthCache?.space_preflight&&batchOptions.include_videos);}
+function startPreparation(){preparedPosts=[];approvedSizes=new Map();committing=false;preparing=Boolean(healthCache?.space_preflight&&!batchOptions.md_only);}
 async function existingCapture(url){
+  if(batchJob)return null; // A copy in another collection is not a copy in this destination.
+  if(batchOptions.subtitle_mode&&batchOptions.subtitle_mode!=='none')return null; // Existing video does not prove the requested subtitles exist.
   if(!healthCache?.capture_history || batchOptions.duplicate_policy!=='skip')return null;
   const required=batchOptions.collection_mode==='text'?['text']:['images'];
   if(batchOptions.collection_mode==='text'){
@@ -18,15 +26,23 @@ async function existingCapture(url){
   }
   if(batchOptions.include_videos)return null; // Never infer an unseen video's completeness.
   const {item}=await service('/history/lookup',{url,required});
+  if(item&&batchOptions.destination){const norm=p=>p.replace(/\\/g,'/').replace(/\/+$/,'').toLowerCase();if(!norm(item.directory).startsWith(norm(batchOptions.destination)+'/'))return null;}
   return item?{status:'skipped',existing:true,url,directory:item.directory,reason:'已有可用副本（上次已加载内容）；未复制到本次目录，也未刷新评论：'+item.directory}:null;
 }
 async function preparePost(tab,port,group,payload,media){
   if(!preparing||committing)return null;
-  let sources=media.filter(m=>m.kind==='video'||m.kind==='gif').map(m=>({...m,canonical_url:payload.canonical_url,page_title:payload.page_title}));
+  if(batchOptions.skip_gifs)media=media.filter(m=>m.kind!=='gif'&&m.extension!=='gif'&&!m.live_missing);
+  let sources=media.filter(m=>batchOptions.include_videos&&(m.kind==='video'||m.kind==='gif')||m.kind==='gif'&&!batchOptions.md_only&&(batchOptions.collection_mode!=='text'||batchOptions.include_images)).map(m=>({...m,canonical_url:payload.canonical_url,page_title:payload.page_title,author_name:payload.author_name}));
   let issue;
-  if(payload.has_video&&!sources.length){try{sources=[await videoSource(tab,{})];}catch(e){issue=e.message;}}
+  if(payload.has_video&&!sources.length&&batchOptions.include_videos){try{sources=[await videoSource(tab,{})];}catch(e){issue=e.message;}}
+  let browserCaptions;
+  if(batchOptions.subtitle_mode&&batchOptions.subtitle_mode!=='none'&&batchOptions.output_format!=='audio'&&typeof browserYouTubeCaptions==='function')try{browserCaptions=await browserYouTubeCaptions(tab,payload.canonical_url);}catch(_){}
   const estimates=[];
-  for(const source of sources){await controlPoint();estimates.push({source,...await probeSource(source)});}
+  for(let source of sources){await controlPoint();
+    if(browserCaptions)source={...source,_browserCaptions:browserCaptions};
+    if(source.kind!=='gif'&&/(^|\.)(x\.com|twitter\.com)$/.test(new URL(payload.canonical_url).hostname))source=await videoSource({...tab,url:payload.canonical_url},{source});
+    estimates.push({source,...await probeSource(source,group)});
+  }
   preparedPosts.push({tab,port,group,payload,media,estimates,issue});
   return {status:'planned',url:payload.canonical_url,reason:issue||'媒体预检完成，尚未下载'};
 }
@@ -38,7 +54,8 @@ async function approveDownloads(entries){
   const disk=await service('/video/probe',{urls:[],destination:batchOptions.destination});
   if(disk.free_bytes<known+(batchOptions.min_free_mb??256)*1048576)throw new Error('目标磁盘空间不足，未开始下载');
   const local=[...unique.values()].reduce((n,e)=>n+(e.local?(e.bytes||0):0),0);
-  const message=`本次预检 ${entries.length} 篇：已知视频 ${(known/1048576).toFixed(1)} MB（可本地复用 ${(local/1048576).toFixed(1)} MB），${unknown} 项大小或地址未知。\n磁盘剩余 ${(disk.free_bytes/1073741824).toFixed(1)} GB；图片、抽帧和临时空间未计入。确认后开始下载。`;
+  const qualities=[...new Set([...unique.values()].map(e=>e.source.quality||'当前源（未标注画质）'))].join('、');
+  const message=`实际画质：${qualities}\n本次预检 ${entries.length} 篇：已知视频 ${(known/1048576).toFixed(1)} MB（可本地复用 ${(local/1048576).toFixed(1)} MB），${unknown} 项大小或地址未知。\n磁盘剩余 ${(disk.free_bytes/1073741824).toFixed(1)} GB；图片、抽帧和临时空间未计入。确认后开始下载。`;
   await chrome.storage.local.set({collectorApproval:{state:'pending',message,createdAt:Date.now()}});
   await reportProgress({message:'媒体预检完成，等待确认下载',details:message});
   while(true){await controlPoint();const {collectorApproval:a}=await chrome.storage.local.get(['collectorApproval']);if(a?.state==='approved')break;if(!a||a.state==='rejected')throw new Error('USER_STOPPED');await wait(750);}
@@ -47,13 +64,16 @@ async function approveDownloads(entries){
 async function commitPrepared(){
   if(!preparing||committing)return;
   await approveDownloads(preparedPosts);committing=true;
-  for(const entry of preparedPosts){await controlPoint();
+  for(const [entryIndex,entry] of preparedPosts.entries()){await controlPoint();
     const key=Object.keys(batchJob.records).find(k=>batchJob.records[k].url===entry.payload.canonical_url&&batchJob.records[k].status==='planned');
     if(!key)continue;
-    try{const media=entry.estimates.map(e=>({...e.source,kind:'video'}));
+    if(!videoBatch()&&typeof imagesRemaining==='function'&&imagesRemaining()===0){await recordPost(key,{status:'partial',url:entry.payload.canonical_url,reason:'达到本次图片上限，此篇尚未处理'});continue;}
+    batchDownloadItem={index:entryIndex+1,total:preparedPosts.length,title:entry.payload.page_title||'未命名作品'};
+    await reportProgress({message:'开始处理',percent:0});
+    try{const media=entry.estimates.map(e=>({...e.source,kind:e.source.kind||'video'}));
       const result=await processBatchPost(entry.tab,entry.port,entry.group,{...entry.payload,_preparedMedia:[...entry.media.filter(m=>m.kind==='photo'),...media],_preflightIssue:entry.issue});
       await recordPost(key,result);
-    }catch(error){if(error.message==='USER_STOPPED'||error.message.includes('NEEDS_ATTENTION')||/保存服务|fetch|超时/.test(error.message))throw error;await recordPost(key,{...batchJob.records[key],status:'failed',url:entry.payload.canonical_url,reason:error.message});}
+    }catch(error){if(error.message==='USER_STOPPED'||error.message.includes('NEEDS_ATTENTION')||/保存服务|fetch|超时/.test(error.message))throw error;await recordPost(key,{...batchJob.records[key],status:'failed',url:entry.payload.canonical_url,reason:error.message});}finally{batchDownloadItem=null;}
   }
   preparing=false;preparedPosts=[];
 }
